@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "BakeryPing — WhatsApp Reminder SaaS"
+version = "1.0.0"
+id = "artifacts/bakery-saas"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18190
+
+[services.development]
+run = "pnpm --filter @workspace/bakery-saas run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/bakery-saas", "run", "build" ]
+publicDir = "artifacts/bakery-saas/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18190"
+BASE_PATH = "/"
