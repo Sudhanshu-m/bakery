@@ -1,29 +1,32 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-
-// ============================================================
-// FILE: src/components/auth/protected-route.tsx
-//
-// Wraps any page that requires a logged-in user.
-// If the user is not authenticated, they are redirected to /login.
-// Used in src/App.tsx around dashboard, customers, campaigns,
-// automations, and settings routes.
-// ============================================================
+import { getSubscriptionState } from "@/lib/db";
 
 interface ProtectedRouteProps {
   component: React.ComponentType;
 }
 
 export function ProtectedRoute({ component: Component }: ProtectedRouteProps) {
-  const { user, loading } = useAuth();
+  const { user, bakery, loading } = useAuth();
   const [, setLocation] = useLocation();
 
+  const subscriptionState = getSubscriptionState(bakery);
+
   useEffect(() => {
-    if (!loading && !user) {
+    if (loading) return;
+
+    // Not logged in → go to login
+    if (!user) {
       setLocation("/login");
+      return;
     }
-  }, [user, loading, setLocation]);
+
+    // Trial/subscription expired → go to payment wall
+    if (bakery && subscriptionState === "expired") {
+      setLocation("/subscribe");
+    }
+  }, [user, bakery, loading, subscriptionState, setLocation]);
 
   if (loading) {
     return (
@@ -37,6 +40,18 @@ export function ProtectedRoute({ component: Component }: ProtectedRouteProps) {
   }
 
   if (!user) return null;
+
+  // Expired: show a brief lock screen while redirecting
+  if (bakery && subscriptionState === "expired") {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-amber-500 border-t-transparent animate-spin" />
+          <p className="text-sm text-muted-foreground">Redirecting...</p>
+        </div>
+      </div>
+    );
+  }
 
   return <Component />;
 }

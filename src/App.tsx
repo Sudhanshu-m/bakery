@@ -4,10 +4,12 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/components/auth/protected-route";
+import { TrialBanner } from "@/components/trial-banner";
 import NotFound from "@/pages/not-found";
 import LandingPage from "@/pages/landing";
 import LoginPage from "@/pages/login";
 import SignupPage from "@/pages/signup";
+import SubscribePage from "@/pages/subscribe";
 import DashboardPage from "@/pages/dashboard";
 import CustomersPage from "@/pages/customers";
 import CampaignsPage from "@/pages/campaigns";
@@ -19,12 +21,11 @@ const queryClient = new QueryClient();
 function Router() {
   return (
     <Switch>
-      {/* Public routes */}
       <Route path="/" component={LandingPage} />
       <Route path="/login" component={LoginPage} />
       <Route path="/signup" component={SignupPage} />
+      <Route path="/subscribe" component={SubscribePage} />
 
-      {/* Protected routes — redirect to /login if not authenticated */}
       <Route path="/dashboard">
         {() => <ProtectedRoute component={DashboardPage} />}
       </Route>
@@ -52,6 +53,7 @@ function App() {
       <TooltipProvider>
         <AuthProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <TrialBanner />
             <Router />
           </WouterRouter>
         </AuthProvider>

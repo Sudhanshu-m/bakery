@@ -1,16 +1,5 @@
 import { supabase } from "./supabase";
 
-// ============================================================
-// FILE: src/lib/db.ts
-//
-// All database query helpers — fully multi-tenant.
-// Supabase RLS automatically scopes every query to the
-// logged-in bakery owner's data. No extra filtering needed.
-//
-// These functions throw a clear error when Supabase is not
-// connected, so you know exactly what to configure.
-// ============================================================
-
 function requireSupabase() {
   if (!supabase) {
     throw new Error(
@@ -22,7 +11,7 @@ function requireSupabase() {
 }
 
 // ----------------------------------------------------------------
-// TYPES — match the columns defined in supabase/schema.sql
+// TYPES
 // ----------------------------------------------------------------
 
 export interface Customer {
@@ -31,7 +20,7 @@ export interface Customer {
   name: string;
   phone: string;
   email: string | null;
-  birthday: string | null;   // "YYYY-MM-DD"
+  birthday: string | null;
   anniversary: string | null;
   notes: string | null;
   tags: string[];
@@ -67,25 +56,12 @@ export interface Bakery {
   owner_id: string;
   name: string;
   phone: string | null;
-  plan: string;
+  plan: "starter" | "growth" | "pro";
   whatsapp_connected: boolean;
   created_at: string;
-}
-
-// Called from: src/pages/settings.tsx (WhatsApp tab)
-export async function getMyBakery(): Promise<Bakery | null> {
-  const db = requireSupabase();
-  const { data, error } = await db.from("bakeries").select("*").single();
-  if (error) return null;
-  return data as Bakery;
-}
-
-// Called from: src/pages/settings.tsx (after connect/disconnect)
-export async function updateBakeryWhatsapp(connected: boolean): Promise<void> {
-  const db = requireSupabase();
-  const { data: bakery } = await db.from("bakeries").select("id").single();
-  if (!bakery) return;
-  await db.from("bakeries").update({ whatsapp_connected: connected }).eq("id", bakery.id);
+  trial_ends_at: string | null;
+  subscription_status: "trial" | "active" | "expired" | "cancelled";
+  razorpay_subscription_id: string | null;
 }
 
 export interface DashboardStats {
@@ -97,10 +73,77 @@ export interface DashboardStats {
 }
 
 // ----------------------------------------------------------------
+// SUBSCRIPTION HELPERS
+// ----------------------------------------------------------------
+
+export type SubscriptionState =
+  | "active"       // paid and valid
+  | "trial"        // within 7-day trial
+  | "trial_ending" // trial ends within 2 days
+  | "expired";     // trial over, no payment
+
+export function getSubscriptionState(bakery: Bakery | null): SubscriptionState {
+  if (!bakery) return "expired";
+
+  if (bakery.subscription_status === "active") return "active";
+
+  if (bakery.subscription_status === "trial" && bakery.trial_ends_at) {
+    const endsAt = new Date(bakery.trial_ends_at);
+    const now = new Date();
+    const msLeft = endsAt.getTime() - now.getTime();
+    const daysLeft = msLeft / (1000 * 60 * 60 * 24);
+
+    if (daysLeft <= 0) return "expired";
+    if (daysLeft <= 2) return "trial_ending";
+    return "trial";
+  }
+
+  return "expired";
+}
+
+export function getTrialDaysLeft(bakery: Bakery | null): number {
+  if (!bakery?.trial_ends_at) return 0;
+  const endsAt = new Date(bakery.trial_ends_at);
+  const msLeft = endsAt.getTime() - Date.now();
+  return Math.max(0, Math.ceil(msLeft / (1000 * 60 * 60 * 24)));
+}
+
+export async function activateSubscription(
+  bakeryId: string,
+  razorpaySubscriptionId: string
+): Promise<void> {
+  const db = requireSupabase();
+  await db
+    .from("bakeries")
+    .update({
+      subscription_status: "active",
+      razorpay_subscription_id: razorpaySubscriptionId,
+    })
+    .eq("id", bakeryId);
+}
+
+// ----------------------------------------------------------------
+// BAKERY
+// ----------------------------------------------------------------
+
+export async function getMyBakery(): Promise<Bakery | null> {
+  const db = requireSupabase();
+  const { data, error } = await db.from("bakeries").select("*").single();
+  if (error) return null;
+  return data as Bakery;
+}
+
+export async function updateBakeryWhatsapp(connected: boolean): Promise<void> {
+  const db = requireSupabase();
+  const { data: bakery } = await db.from("bakeries").select("id").single();
+  if (!bakery) return;
+  await db.from("bakeries").update({ whatsapp_connected: connected }).eq("id", bakery.id);
+}
+
+// ----------------------------------------------------------------
 // CUSTOMERS
 // ----------------------------------------------------------------
 
-// Called from: src/pages/customers.tsx
 export async function getCustomers(): Promise<Customer[]> {
   const db = requireSupabase();
   const { data, error } = await db
@@ -111,7 +154,6 @@ export async function getCustomers(): Promise<Customer[]> {
   return data as Customer[];
 }
 
-// Called from: src/pages/customers.tsx (add modal)
 export async function createCustomer(
   input: Omit<Customer, "id" | "bakery_id" | "created_at">
 ): Promise<Customer> {
@@ -128,7 +170,6 @@ export async function createCustomer(
   return data as Customer;
 }
 
-// Called from: src/pages/customers.tsx (edit modal)
 export async function updateCustomer(
   id: string,
   updates: Partial<Omit<Customer, "id" | "bakery_id" | "created_at">>
@@ -140,7 +181,6 @@ export async function updateCustomer(
   return data as Customer;
 }
 
-// Called from: src/pages/customers.tsx (delete)
 export async function deleteCustomer(id: string): Promise<void> {
   const db = requireSupabase();
   const { error } = await db.from("customers").delete().eq("id", id);
@@ -151,7 +191,6 @@ export async function deleteCustomer(id: string): Promise<void> {
 // CAMPAIGNS
 // ----------------------------------------------------------------
 
-// Called from: src/pages/campaigns.tsx
 export async function getCampaigns(): Promise<Campaign[]> {
   const db = requireSupabase();
   const { data, error } = await db
@@ -162,7 +201,6 @@ export async function getCampaigns(): Promise<Campaign[]> {
   return data as Campaign[];
 }
 
-// Called from: src/pages/campaigns.tsx (create)
 export async function createCampaign(
   input: Omit<Campaign, "id" | "bakery_id" | "send_count" | "open_rate" | "created_at">
 ): Promise<Campaign> {
@@ -179,7 +217,6 @@ export async function createCampaign(
   return data as Campaign;
 }
 
-// Called from: src/pages/campaigns.tsx (edit/pause/activate)
 export async function updateCampaign(
   id: string,
   updates: Partial<Omit<Campaign, "id" | "bakery_id" | "created_at">>
@@ -191,7 +228,6 @@ export async function updateCampaign(
   return data as Campaign;
 }
 
-// Called from: src/pages/campaigns.tsx (delete)
 export async function deleteCampaign(id: string): Promise<void> {
   const db = requireSupabase();
   const { error } = await db.from("campaigns").delete().eq("id", id);
@@ -202,7 +238,6 @@ export async function deleteCampaign(id: string): Promise<void> {
 // AUTOMATIONS
 // ----------------------------------------------------------------
 
-// Called from: src/pages/automations.tsx
 export async function getAutomations(): Promise<Automation[]> {
   const db = requireSupabase();
   const { data, error } = await db
@@ -213,7 +248,6 @@ export async function getAutomations(): Promise<Automation[]> {
   return data as Automation[];
 }
 
-// Called from: src/pages/automations.tsx (toggle on/off)
 export async function updateAutomation(
   id: string,
   updates: Partial<Omit<Automation, "id" | "bakery_id" | "created_at">>
@@ -229,7 +263,6 @@ export async function updateAutomation(
 // DASHBOARD STATS
 // ----------------------------------------------------------------
 
-// Called from: src/pages/dashboard.tsx
 export async function getDashboardStats(): Promise<DashboardStats> {
   const db = requireSupabase();
   const today = new Date();

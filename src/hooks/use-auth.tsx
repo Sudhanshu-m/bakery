@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { ensureBakeryExists } from "@/lib/auth";
-import type { Bakery } from "@/lib/auth";
+import type { Bakery } from "@/lib/db";
 
 interface AuthContextValue {
   session: Session | null;

@@ -23,10 +23,10 @@ import {
   getCustomers, getMyBakery,
   type Campaign, type Customer,
 } from "@/lib/db";
+import { supabase } from "@/lib/supabase";
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? "http://localhost:4000";
 
-// Normalize to Indian number: 10 digits → prefix 91
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/[^0-9]/g, "");
   if (digits.length === 10) return "91" + digits;
@@ -40,6 +40,7 @@ function buildRecipients(campaign: Campaign, customers: Customer[]) {
   } else if (campaign.trigger_type === "anniversary") {
     targets = customers.filter((c) => c.anniversary && c.phone && c.status === "active");
   } else {
+    // "manual" and "scheduled" both send to ALL active customers
     targets = customers.filter((c) => c.phone && c.status === "active");
   }
   return targets.map((c) => ({
@@ -54,6 +55,30 @@ function getPreviewCustomer(campaign: Campaign | null, customers: Customer[]): C
   if (campaign.trigger_type === "birthday")    return customers.find((c) => !!c.birthday)    ?? customers[0];
   if (campaign.trigger_type === "anniversary") return customers.find((c) => !!c.anniversary) ?? customers[0];
   return customers[0];
+}
+
+// Upload a campaign banner to Supabase Storage and return the public URL
+async function uploadBannerImage(file: File, campaignId: string): Promise<string | null> {
+  if (!supabase) return null;
+  try {
+    const ext = file.name.split(".").pop() ?? "jpg";
+    const filePath = `${campaignId}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("campaigns")
+      .upload(filePath, file, { upsert: true, contentType: file.type });
+
+    if (uploadError) {
+      console.error("Banner upload failed:", uploadError.message);
+      return null;
+    }
+
+    const { data } = supabase.storage.from("campaigns").getPublicUrl(filePath);
+    return data.publicUrl;
+  } catch (err) {
+    console.error("Banner upload error:", err);
+    return null;
+  }
 }
 
 const statusColors: Record<Campaign["status"], string> = {
@@ -89,17 +114,14 @@ export default function CampaignsPage() {
   const [previewCampaign, setPreviewCampaign] = useState<Campaign | null>(null);
   const [saving, setSaving]         = useState(false);
 
-  // Publish progress
   const [publishing, setPublishing] = useState<string | null>(null);
   const [publishProgress, setPublishProgress] = useState<{ sent: number; total: number } | null>(null);
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
 
-  // New campaign form
   const [newName, setNewName]       = useState("");
   const [newMessage, setNewMessage] = useState("Hi {name}! 🎂 ");
   const [newTrigger, setNewTrigger] = useState<Campaign["trigger_type"]>("manual");
 
-  // Banner inside form
   const [bannerFile, setBannerFile]     = useState<File | null>(null);
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
   const [isDragging, setIsDragging]     = useState(false);
@@ -162,7 +184,7 @@ export default function CampaignsPage() {
 
     const recipients = buildRecipients(campaign, customers);
     if (recipients.length === 0) {
-      alert(`No matching customers found for trigger type "${campaign.trigger_type}". Add customers first.`);
+      alert(`No matching customers found for this campaign. Add customers first.`);
       return;
     }
 
@@ -171,16 +193,29 @@ export default function CampaignsPage() {
     setPublishResult(null);
 
     try {
-      // 1. Mark campaign active in DB
+      // 1. If there's a banner image, upload it to Supabase Storage first
+      let imageUrl: string | null = null;
+      if (bannerFile) {
+        imageUrl = await uploadBannerImage(bannerFile, campaign.id);
+        if (!imageUrl) {
+          console.warn("Banner upload failed — sending text-only message");
+        }
+      }
+
+      // 2. Mark campaign active in DB
       const updated = await updateCampaign(campaign.id, { status: "active" });
       setCampaigns((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
       if (previewCampaign?.id === updated.id) setPreviewCampaign(updated);
 
-      // 2. Bulk-send via WhatsApp server
+      // 3. Bulk-send via WhatsApp server (pass imageUrl if we have one)
       const res = await fetch(`${SERVER_URL}/send-bulk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bakeryId, recipients }),
+        body: JSON.stringify({
+          bakeryId,
+          recipients,
+          ...(imageUrl ? { imageUrl } : {}),
+        }),
       });
 
       if (!res.ok) {
@@ -235,7 +270,7 @@ export default function CampaignsPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-          {/* ── Campaign list ── */}
+          {/* Campaign list */}
           <div className="lg:col-span-2 flex flex-col gap-4">
             {loading ? (
               <div className="flex flex-col gap-3">
@@ -280,8 +315,10 @@ export default function CampaignsPage() {
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-sm truncate">{campaign.name}</div>
                             <div className="text-xs text-muted-foreground mt-0.5">
-                              {campaign.trigger_type.charAt(0).toUpperCase() + campaign.trigger_type.slice(1)} ·{" "}
-                              {new Date(campaign.created_at).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}
+                              {campaign.trigger_type === "manual"
+                                ? "All customers"
+                                : campaign.trigger_type.charAt(0).toUpperCase() + campaign.trigger_type.slice(1)}{" "}
+                              · {new Date(campaign.created_at).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}
                             </div>
                           </div>
                         </div>
@@ -314,7 +351,6 @@ export default function CampaignsPage() {
                         </div>
                       </div>
 
-                      {/* Sending progress bar */}
                       <AnimatePresence>
                         {isPublishing && publishProgress && (
                           <motion.div
@@ -334,7 +370,6 @@ export default function CampaignsPage() {
                         )}
                       </AnimatePresence>
 
-                      {/* Send result */}
                       <AnimatePresence>
                         {result && (
                           <motion.div
@@ -383,7 +418,7 @@ export default function CampaignsPage() {
             )}
           </div>
 
-          {/* ── WhatsApp preview ── */}
+          {/* WhatsApp preview */}
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -408,6 +443,9 @@ export default function CampaignsPage() {
                     </div>
                   </div>
                   <div className="bg-white rounded-2xl rounded-tl-sm p-3 max-w-[85%]">
+                    {bannerPreview && (
+                      <img src={bannerPreview} alt="banner" className="w-full rounded-lg mb-2 object-cover max-h-24" />
+                    )}
                     <p className="text-xs text-gray-800 leading-relaxed">{previewText}</p>
                     <div className="flex items-center justify-end gap-1 mt-2">
                       <span className="text-[10px] text-gray-400">
@@ -431,7 +469,7 @@ export default function CampaignsPage() {
                   <>
                     <span className="font-medium text-foreground">{previewCampaign.name}</span>
                     {previewCustomer && (
-                      <> · sample name: <span className="font-medium text-foreground">{previewCustomer.name}</span></>
+                      <> · sample: <span className="font-medium text-foreground">{previewCustomer.name}</span></>
                     )}
                   </>
                 ) : "Select a campaign to preview"}
@@ -452,14 +490,12 @@ export default function CampaignsPage() {
         </div>
       </div>
 
-      {/* ── New Campaign Modal ── */}
+      {/* New Campaign Modal */}
       <Dialog open={newCampaignOpen} onOpenChange={(o) => { if (!o) resetForm(); setNewCampaignOpen(o); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader><DialogTitle>New Campaign</DialogTitle></DialogHeader>
 
           <div className="flex flex-col gap-4 mt-2">
-
-            {/* Campaign Name */}
             <div>
               <Label className="text-sm font-medium mb-1.5 block">Campaign Name</Label>
               <Input
@@ -469,7 +505,6 @@ export default function CampaignsPage() {
               />
             </div>
 
-            {/* Trigger type */}
             <div>
               <Label className="text-sm font-medium mb-1.5 block">Who receives this?</Label>
               <Select value={newTrigger} onValueChange={(v) => setNewTrigger(v as Campaign["trigger_type"])}>
@@ -477,8 +512,8 @@ export default function CampaignsPage() {
                 <SelectContent>
                   <SelectItem value="birthday">🎂 Customers with a birthday</SelectItem>
                   <SelectItem value="anniversary">🎉 Customers with an anniversary</SelectItem>
-                  <SelectItem value="manual">📋 All active customers</SelectItem>
-                  <SelectItem value="scheduled">🕒 All active customers (scheduled)</SelectItem>
+                  <SelectItem value="manual">📢 Send to all customers</SelectItem>
+                  <SelectItem value="scheduled">🕒 All customers (scheduled)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground mt-1">
@@ -486,7 +521,6 @@ export default function CampaignsPage() {
               </p>
             </div>
 
-            {/* Message template */}
             <div>
               <Label className="text-sm font-medium mb-1.5 block">Message</Label>
               <Textarea
@@ -502,7 +536,9 @@ export default function CampaignsPage() {
 
             {/* Banner upload */}
             <div>
-              <Label className="text-sm font-medium mb-1.5 block">Campaign Banner <span className="font-normal text-muted-foreground">(optional)</span></Label>
+              <Label className="text-sm font-medium mb-1.5 block">
+                Campaign Image <span className="font-normal text-muted-foreground">(optional — sent as WhatsApp image)</span>
+              </Label>
               <div
                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}

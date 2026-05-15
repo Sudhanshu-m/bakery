@@ -3,7 +3,9 @@ import cors from "cors";
 import QRCode from "qrcode";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
+import { createClient } from "@supabase/supabase-js";
 
 import {
   default as makeWASocket,
@@ -24,6 +26,16 @@ app.use(cors());
 app.use(express.json());
 
 const sessions = {};
+
+// Supabase client (for webhook to update subscription status)
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = supabaseUrl && supabaseServiceKey
+  ? createClient(supabaseUrl, supabaseServiceKey)
+  : null;
+
+// Razorpay webhook secret (set in Render env vars)
+const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET;
 
 // Normalize to Indian number: bare 10-digit numbers get 91 prefixed automatically
 function normalizePhone(phone) {
@@ -84,7 +96,6 @@ async function createSession(bakeryId) {
 
       if (!loggedOut) {
         console.log(`[${bakeryId}] Reconnecting…`);
-        // Small delay before reconnect to avoid tight loops
         setTimeout(() => createSession(bakeryId), 3000);
       } else {
         console.log(`[${bakeryId}] Logged out — clearing session`);
@@ -95,8 +106,6 @@ async function createSession(bakeryId) {
   });
 }
 
-// ── On startup: reconnect any sessions saved on disk ──────────────────────────
-// This means owners only scan QR once — the session persists across restarts.
 async function reconnectExistingSessions() {
   if (!fs.existsSync(SESSIONS_DIR)) return;
   const entries = fs.readdirSync(SESSIONS_DIR);
@@ -116,7 +125,6 @@ async function reconnectExistingSessions() {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
-// Start a new WhatsApp session (or return existing)
 app.post("/connect/:bakeryId", async (req, res) => {
   try {
     const { bakeryId } = req.params;
@@ -133,7 +141,6 @@ app.post("/connect/:bakeryId", async (req, res) => {
   }
 });
 
-// Check current connection status
 app.get("/status/:bakeryId", (req, res) => {
   const { bakeryId } = req.params;
   const session = sessions[bakeryId];
@@ -148,7 +155,6 @@ app.get("/status/:bakeryId", (req, res) => {
   });
 });
 
-// Poll for QR code / connection state
 app.get("/qr/:bakeryId", (req, res) => {
   const { bakeryId } = req.params;
   const session = sessions[bakeryId];
@@ -158,7 +164,6 @@ app.get("/qr/:bakeryId", (req, res) => {
   res.json({ qr: session.qr, connected: session.connected, phone: session.phone });
 });
 
-// Disconnect and clear a session
 app.post("/disconnect/:bakeryId", async (req, res) => {
   try {
     const { bakeryId } = req.params;
@@ -181,16 +186,25 @@ app.post("/disconnect/:bakeryId", async (req, res) => {
   }
 });
 
-// Send a single WhatsApp message
+// ── Send a single WhatsApp message (supports optional image) ─────────────────
 app.post("/send-message", async (req, res) => {
   try {
-    const { bakeryId, phone, message } = req.body;
+    const { bakeryId, phone, message, imageUrl } = req.body;
     const session = sessions[bakeryId];
     if (!session) return res.status(404).json({ error: "Session not found" });
     if (!session.connected) return res.status(400).json({ error: "WhatsApp not connected" });
 
     const jid = normalizePhone(phone) + "@s.whatsapp.net";
-    await session.sock.sendMessage(jid, { text: message });
+
+    if (imageUrl) {
+      await session.sock.sendMessage(jid, {
+        image: { url: imageUrl },
+        caption: message,
+      });
+    } else {
+      await session.sock.sendMessage(jid, { text: message });
+    }
+
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -198,11 +212,10 @@ app.post("/send-message", async (req, res) => {
   }
 });
 
-// Bulk send — used when publishing a campaign
+// ── Bulk send (supports optional imageUrl for all recipients) ─────────────────
 app.post("/send-bulk", async (req, res) => {
   try {
-    const { bakeryId, recipients } = req.body;
-    // recipients: Array<{ phone: string; message: string }>
+    const { bakeryId, recipients, imageUrl } = req.body;
     const session = sessions[bakeryId];
     if (!session) return res.status(404).json({ error: "Session not found" });
     if (!session.connected) return res.status(400).json({ error: "WhatsApp not connected" });
@@ -212,9 +225,17 @@ app.post("/send-bulk", async (req, res) => {
     for (const { phone, message } of recipients) {
       try {
         const jid = normalizePhone(phone) + "@s.whatsapp.net";
-        await session.sock.sendMessage(jid, { text: message });
+
+        if (imageUrl) {
+          await session.sock.sendMessage(jid, {
+            image: { url: imageUrl },
+            caption: message,
+          });
+        } else {
+          await session.sock.sendMessage(jid, { text: message });
+        }
+
         results.sent++;
-        // Small delay between messages to avoid rate-limiting
         await new Promise((r) => setTimeout(r, 800));
       } catch (err) {
         results.failed++;
@@ -226,6 +247,65 @@ app.post("/send-bulk", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Bulk send failed" });
+  }
+});
+
+// ── Razorpay Webhook ──────────────────────────────────────────────────────────
+// Razorpay calls this when a subscription payment succeeds or fails.
+// Set this URL in Razorpay Dashboard → Settings → Webhooks
+// URL: https://bakery-ur88.onrender.com/razorpay-webhook
+app.post("/razorpay-webhook", express.raw({ type: "application/json" }), async (req, res) => {
+  try {
+    // Verify webhook signature
+    if (RAZORPAY_WEBHOOK_SECRET) {
+      const signature = req.headers["x-razorpay-signature"];
+      const expectedSig = crypto
+        .createHmac("sha256", RAZORPAY_WEBHOOK_SECRET)
+        .update(req.body)
+        .digest("hex");
+      if (signature !== expectedSig) {
+        return res.status(400).json({ error: "Invalid signature" });
+      }
+    }
+
+    const event = JSON.parse(req.body.toString());
+    console.log("[webhook] Razorpay event:", event.event);
+
+    if (!supabase) {
+      console.warn("[webhook] Supabase not configured — skipping DB update");
+      return res.json({ received: true });
+    }
+
+    const subscriptionId = event.payload?.subscription?.entity?.id;
+    const bakeryId = event.payload?.subscription?.entity?.notes?.bakery_id;
+
+    if (event.event === "subscription.activated" || event.event === "subscription.charged") {
+      // Payment succeeded — activate the bakery
+      if (bakeryId) {
+        await supabase.from("bakeries")
+          .update({
+            subscription_status: "active",
+            razorpay_subscription_id: subscriptionId,
+          })
+          .eq("id", bakeryId);
+        console.log(`[webhook] Bakery ${bakeryId} activated`);
+      }
+    }
+
+    if (event.event === "subscription.cancelled" || event.event === "subscription.expired") {
+      // Subscription ended — mark expired
+      if (bakeryId) {
+        await supabase.from("bakeries")
+          .update({ subscription_status: "expired" })
+          .eq("id", bakeryId);
+        console.log(`[webhook] Bakery ${bakeryId} expired`);
+      }
+    }
+
+    res.json({ received: true });
+  } catch (err) {
+    console.error("[webhook] Error:", err);
+    res.status(500).json({ error: "Webhook processing failed" });
   }
 });
 

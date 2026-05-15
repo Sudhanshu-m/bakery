@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { type Bakery } from "./db";
 
 function requireSupabase() {
   if (!supabase) {
@@ -8,16 +9,6 @@ function requireSupabase() {
     );
   }
   return supabase;
-}
-
-export interface Bakery {
-  id: string;
-  owner_id: string;
-  name: string;
-  phone: string | null;
-  plan: "starter" | "growth" | "pro";
-  whatsapp_connected: boolean;
-  created_at: string;
 }
 
 const PENDING_BAKERY_NAME_KEY = "bakeryping_pending_bakery_name";
