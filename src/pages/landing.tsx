@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { motion, useScroll, useTransform } from "framer-motion";
-import { 
-  MessageCircle, Bell, Users, BarChart3, Check, Star, 
-  ChevronDown, Menu, X, ArrowRight, Zap, Shield, Clock,
-  Cake, Heart, TrendingUp, Smartphone
+import { motion } from "framer-motion";
+import {
+  MessageCircle, Bell, Users, BarChart3, Check, Star,
+  ChevronDown, Menu, X, ArrowRight, Zap, Shield,
+  Cake, TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { mockTestimonials, mockFaqs, mockPricingPlans } from "@/lib/mock-data";
+import { mockTestimonials, mockFaqs } from "@/lib/mock-data";
 
 const features = [
   {
@@ -38,8 +38,8 @@ const features = [
   },
   {
     icon: Shield,
-    title: "GDPR Compliant",
-    description: "Your customer data is encrypted, secure, and never shared. We handle compliance so you can focus on baking.",
+    title: "Secure & Reliable",
+    description: "Your customer data is encrypted and secure. We handle reliability so you can focus on baking.",
   },
 ];
 
@@ -68,16 +68,25 @@ const stats = [
   { label: "Avg. revenue increase", value: "38%" },
 ];
 
+const planFeatures = [
+  "Unlimited customers",
+  "Unlimited WhatsApp campaigns",
+  "Birthday & anniversary automations",
+  "Campaign image attachments",
+  "Bulk message sending",
+  "Advanced analytics & reports",
+  "n8n automation integration",
+  "Priority support",
+  "7-day free trial included",
+];
+
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   const containerVariants = {
     hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: { staggerChildren: 0.1 },
-    },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } },
   } as const;
 
   const itemVariants = {
@@ -87,6 +96,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+
       {/* Navbar */}
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
@@ -121,7 +131,6 @@ export default function LandingPage() {
           <button
             className="md:hidden p-2 rounded-md hover:bg-muted"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            data-testid="button-mobile-menu"
           >
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -156,7 +165,7 @@ export default function LandingPage() {
         )}
       </header>
 
-      {/* Hero Section */}
+      {/* Hero */}
       <section className="relative overflow-hidden pt-20 pb-32 px-4 sm:px-6">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent pointer-events-none" />
         <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-primary/8 blur-3xl pointer-events-none" />
@@ -171,7 +180,7 @@ export default function LandingPage() {
           >
             <motion.div variants={itemVariants} className="mb-6">
               <Badge variant="secondary" className="text-xs font-medium px-3 py-1 rounded-full bg-primary/10 text-primary border-primary/20">
-                Trusted by 1,200+ bakeries worldwide
+                Trusted by 1,200+ bakeries
               </Badge>
             </motion.div>
 
@@ -193,15 +202,16 @@ export default function LandingPage() {
             <motion.div variants={itemVariants} className="flex flex-col sm:flex-row gap-3 justify-center mb-16">
               <Link href="/signup">
                 <Button size="lg" className="w-full sm:w-auto text-base px-8 h-12">
-                  Start free 14-day trial <ArrowRight className="ml-2 w-4 h-4" />
+                  Start free 7-day trial <ArrowRight className="ml-2 w-4 h-4" />
                 </Button>
               </Link>
-              <Button size="lg" variant="outline" className="w-full sm:w-auto text-base px-8 h-12">
-                Watch demo
-              </Button>
+              <Link href="/login">
+                <Button size="lg" variant="outline" className="w-full sm:w-auto text-base px-8 h-12">
+                  Log in to your account
+                </Button>
+              </Link>
             </motion.div>
 
-            {/* Stats row */}
             <motion.div
               variants={itemVariants}
               className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-3xl mx-auto"
@@ -215,15 +225,14 @@ export default function LandingPage() {
             </motion.div>
           </motion.div>
 
-          {/* Dashboard preview mockup */}
+          {/* Dashboard preview */}
           <motion.div
             initial={{ opacity: 0, y: 60 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.4, ease: "easeOut" }}
-            className="mt-20 mx-auto max-w-5xl"
+            className="mt-20 mx-auto max-w-5xl relative"
           >
             <div className="relative rounded-2xl border border-border shadow-2xl overflow-hidden bg-card">
-              {/* Browser bar */}
               <div className="h-10 bg-muted/60 border-b border-border flex items-center px-4 gap-2">
                 <div className="flex gap-1.5">
                   <div className="w-3 h-3 rounded-full bg-red-400" />
@@ -236,10 +245,7 @@ export default function LandingPage() {
                   </div>
                 </div>
               </div>
-
-              {/* App preview */}
               <div className="flex h-72 sm:h-96">
-                {/* Sidebar */}
                 <div className="w-14 sm:w-48 bg-sidebar border-r border-sidebar-border flex flex-col">
                   <div className="p-3 sm:p-4 border-b border-sidebar-border flex items-center gap-2">
                     <div className="w-6 h-6 rounded bg-primary flex items-center justify-center shrink-0">
@@ -250,15 +256,13 @@ export default function LandingPage() {
                   {["Dashboard", "Customers", "Campaigns", "Automations"].map((item, i) => (
                     <div
                       key={item}
-                      className={`flex items-center gap-2 px-3 py-2 mx-2 my-0.5 rounded-md text-xs cursor-pointer ${i === 0 ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground/70'}`}
+                      className={`flex items-center gap-2 px-3 py-2 mx-2 my-0.5 rounded-md text-xs cursor-pointer ${i === 0 ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground/70"}`}
                     >
-                      <div className={`w-3 h-3 rounded-sm ${i === 0 ? 'bg-primary' : 'bg-sidebar-foreground/20'}`} />
+                      <div className={`w-3 h-3 rounded-sm ${i === 0 ? "bg-primary" : "bg-sidebar-foreground/20"}`} />
                       <span className="hidden sm:block">{item}</span>
                     </div>
                   ))}
                 </div>
-
-                {/* Content */}
                 <div className="flex-1 p-4 sm:p-6 bg-background overflow-hidden">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                     {[
@@ -282,7 +286,7 @@ export default function LandingPage() {
                             className="rounded-t-sm"
                             style={{
                               height: `${h}%`,
-                              background: i === 5 ? 'hsl(32 96% 44%)' : 'hsl(32 96% 44% / 0.25)',
+                              background: i === 5 ? "hsl(32 96% 44%)" : "hsl(32 96% 44% / 0.25)",
                             }}
                           />
                         </div>
@@ -293,7 +297,6 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Floating cards */}
             <motion.div
               animate={{ y: [0, -8, 0] }}
               transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
@@ -305,7 +308,7 @@ export default function LandingPage() {
                 </div>
                 <div>
                   <div className="text-xs font-medium text-foreground">Reminder sent!</div>
-                  <div className="text-xs text-muted-foreground">Alice B. — Birthday Nov 15</div>
+                  <div className="text-xs text-muted-foreground">Priya — Birthday today</div>
                 </div>
               </div>
             </motion.div>
@@ -329,14 +332,13 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Features Section */}
+      {/* Features */}
       <section id="features" className="py-24 px-4 sm:px-6 bg-muted/30">
         <div className="max-w-7xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
             className="text-center mb-16"
           >
             <Badge variant="secondary" className="mb-4 bg-primary/10 text-primary border-primary/20">Features</Badge>
@@ -345,7 +347,6 @@ export default function LandingPage() {
               Built specifically for bakeries, patisseries, and confectioneries — not generic CRM software.
             </p>
           </motion.div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {features.map((feature, i) => (
               <motion.div
@@ -374,7 +375,6 @@ export default function LandingPage() {
             initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
             className="text-center mb-16"
           >
             <Badge variant="secondary" className="mb-4 bg-primary/10 text-primary border-primary/20">How it works</Badge>
@@ -383,7 +383,6 @@ export default function LandingPage() {
               No technical setup required. No coding. Just scan, import, and go.
             </p>
           </motion.div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {steps.map((step, i) => (
               <motion.div
@@ -420,7 +419,6 @@ export default function LandingPage() {
             <Badge variant="secondary" className="mb-4 bg-primary/10 text-primary border-primary/20">Testimonials</Badge>
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">Loved by bakers everywhere</h2>
           </motion.div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {mockTestimonials.map((t, i) => (
               <motion.div
@@ -452,7 +450,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Pricing */}
+      {/* Pricing — single ₹8,000/month plan */}
       <section id="pricing" className="py-24 px-4 sm:px-6">
         <div className="max-w-7xl mx-auto">
           <motion.div
@@ -464,53 +462,53 @@ export default function LandingPage() {
             <Badge variant="secondary" className="mb-4 bg-primary/10 text-primary border-primary/20">Pricing</Badge>
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">Simple, honest pricing</h2>
             <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-              No setup fees. No long contracts. Cancel anytime. All plans include a 14-day free trial.
+              One plan, everything included. 7-day free trial — no credit card required.
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {mockPricingPlans.map((plan, i) => (
-              <motion.div
-                key={plan.id}
-                initial={{ opacity: 0, y: 24 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-                className={`rounded-2xl border p-6 flex flex-col relative ${plan.popular ? 'border-primary shadow-lg ring-1 ring-primary' : 'border-border'}`}
-              >
-                {plan.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <Badge className="bg-primary text-white text-xs px-3 py-0.5">Most popular</Badge>
-                  </div>
-                )}
-                <div className="mb-6">
-                  <h3 className="font-bold text-lg mb-1">{plan.name}</h3>
-                  <p className="text-sm text-muted-foreground mb-4">{plan.description}</p>
-                  <div className="flex items-end gap-1">
-                    <span className="text-4xl font-extrabold">${plan.price}</span>
-                    <span className="text-muted-foreground mb-1">/{plan.period}</span>
-                  </div>
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="max-w-md mx-auto"
+          >
+            <div className="rounded-2xl border-2 border-primary shadow-xl overflow-hidden">
+              {/* Plan header */}
+              <div className="bg-primary px-8 py-8 text-white text-center">
+                <div className="text-sm font-medium opacity-80 mb-2">BakeryPing Pro</div>
+                <div className="flex items-baseline justify-center gap-1 mb-1">
+                  <span className="text-5xl font-extrabold">₹8,000</span>
+                  <span className="text-lg opacity-70">/month</span>
                 </div>
-                <ul className="flex flex-col gap-3 mb-8 flex-1">
-                  {plan.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-sm">
-                      <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                      <span>{f}</span>
-                    </li>
+                <p className="text-sm opacity-70 mt-2">
+                  Auto-renews monthly · Cancel anytime
+                </p>
+              </div>
+
+              {/* Features list */}
+              <div className="bg-card px-8 py-6">
+                <div className="flex flex-col gap-3 mb-8">
+                  {planFeatures.map((f) => (
+                    <div key={f} className="flex items-center gap-3 text-sm">
+                      <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <Check className="w-3 h-3 text-primary" />
+                      </div>
+                      {f}
+                    </div>
                   ))}
-                </ul>
+                </div>
+
                 <Link href="/signup">
-                  <Button
-                    variant={plan.popular ? "default" : "outline"}
-                    className="w-full"
-                    data-testid={`button-pricing-${plan.id}`}
-                  >
-                    {plan.cta}
+                  <Button className="w-full h-12 text-base font-semibold">
+                    Start 7-day free trial <ArrowRight className="ml-2 w-4 h-4" />
                   </Button>
                 </Link>
-              </motion.div>
-            ))}
-          </div>
+                <p className="text-xs text-muted-foreground text-center mt-3">
+                  No credit card required for trial · Pay via UPI, Card, or QR
+                </p>
+              </div>
+            </div>
+          </motion.div>
         </div>
       </section>
 
@@ -526,7 +524,6 @@ export default function LandingPage() {
             <Badge variant="secondary" className="mb-4 bg-primary/10 text-primary border-primary/20">FAQ</Badge>
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">Questions & answers</h2>
           </motion.div>
-
           <div className="flex flex-col gap-3">
             {mockFaqs.map((faq, i) => (
               <motion.div
@@ -540,11 +537,10 @@ export default function LandingPage() {
                 <button
                   className="w-full flex items-center justify-between p-5 text-left"
                   onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                  data-testid={`button-faq-${i}`}
                 >
                   <span className="font-medium text-sm">{faq.q}</span>
                   <ChevronDown
-                    className={`w-4 h-4 text-muted-foreground shrink-0 ml-4 transition-transform ${openFaq === i ? 'rotate-180' : ''}`}
+                    className={`w-4 h-4 text-muted-foreground shrink-0 ml-4 transition-transform ${openFaq === i ? "rotate-180" : ""}`}
                   />
                 </button>
                 {openFaq === i && (
@@ -564,7 +560,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* CTA Footer */}
+      {/* CTA */}
       <section className="py-24 px-4 sm:px-6">
         <div className="max-w-4xl mx-auto">
           <motion.div
@@ -582,12 +578,17 @@ export default function LandingPage() {
                 Ready to bring customers back?
               </h2>
               <p className="text-white/80 text-lg mb-8 max-w-xl mx-auto">
-                Start your free 14-day trial today. No credit card required.
+                Start your free 7-day trial today. No credit card required.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <Link href="/signup">
-                  <Button size="lg" variant="secondary" className="w-full sm:w-auto text-base px-8 h-12 text-foreground" data-testid="button-cta-signup">
+                  <Button size="lg" variant="secondary" className="w-full sm:w-auto text-base px-8 h-12 text-foreground">
                     Get started free <ArrowRight className="ml-2 w-4 h-4" />
+                  </Button>
+                </Link>
+                <Link href="/login">
+                  <Button size="lg" variant="outline" className="w-full sm:w-auto text-base px-8 h-12 text-white border-white/30 hover:bg-white/10">
+                    Log in
                   </Button>
                 </Link>
               </div>
@@ -606,7 +607,7 @@ export default function LandingPage() {
             <span className="font-semibold text-sm">BakeryPing</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            2024 BakeryPing. Built with love for bakers.
+            2025 BakeryPing. Built with love for bakers.
           </p>
           <div className="flex gap-6">
             {["Privacy", "Terms", "Contact"].map((item) => (
