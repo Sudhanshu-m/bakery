@@ -25,6 +25,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Log every incoming request so we can see if endpoints are being hit
+app.use((req, _res, next) => {
+  if (!req.path.startsWith("/qr") && !req.path.startsWith("/status")) {
+    console.log(`[HTTP] ${req.method} ${req.path}`, JSON.stringify(req.body ?? {}).slice(0, 200));
+  }
+  next();
+});
+
 const sessions = {};
 
 // Supabase client (for webhook to update subscription status)
@@ -347,6 +355,44 @@ app.post("/razorpay-webhook", express.raw({ type: "application/json" }), async (
   } catch (err) {
     console.error("[webhook] Error:", err);
     res.status(500).json({ error: "Webhook processing failed" });
+  }
+});
+
+// ── Direct image test endpoint ────────────────────────────────────────────────
+// Call this to verify image sending works independently of the campaign flow.
+// POST /test-image/:bakeryId  { phone: "9876543210", imageUrl: "https://..." }
+app.post("/test-image/:bakeryId", async (req, res) => {
+  try {
+    const { bakeryId } = req.params;
+    const { phone, imageUrl } = req.body;
+
+    console.log(`[test-image] bakeryId=${bakeryId} phone=${phone} imageUrl=${imageUrl}`);
+
+    if (!phone || !imageUrl) {
+      return res.status(400).json({ error: "phone and imageUrl are required" });
+    }
+
+    const session = sessions[bakeryId];
+    if (!session) return res.status(404).json({ error: "No session — connect WhatsApp first" });
+    if (!session.connected) return res.status(400).json({ error: "WhatsApp not connected" });
+
+    const jid = normalizePhone(phone) + "@s.whatsapp.net";
+
+    console.log(`[test-image] Downloading image from: ${imageUrl}`);
+    const { buffer, mimetype } = await fetchImageBuffer(imageUrl);
+    console.log(`[test-image] Downloaded ${buffer.length} bytes (${mimetype})`);
+
+    await session.sock.sendMessage(jid, {
+      image: buffer,
+      mimetype,
+      caption: "🧪 BakeryPing image test — if you see this, image sending works!",
+    });
+
+    console.log(`[test-image] Sent successfully to ${jid}`);
+    res.json({ success: true, bytes: buffer.length, mimetype });
+  } catch (err) {
+    console.error(`[test-image] FAILED:`, err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
