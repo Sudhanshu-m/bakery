@@ -276,8 +276,8 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   if (customersResult.error) throw customersResult.error;
   if (messagesResult.error) throw messagesResult.error;
 
-  const customers = customersResult.data ?? [];
-  const messages = messagesResult.data ?? [];
+  const customers = (customersResult.data ?? []) as Array<{ id: string; birthday: string | null; anniversary: string | null }>;
+  const messages = (messagesResult.data ?? []) as Array<{ status: string }>;
 
   return {
     totalCustomers: customersResult.count ?? 0,
