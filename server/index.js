@@ -186,6 +186,24 @@ app.post("/disconnect/:bakeryId", async (req, res) => {
   }
 });
 
+// ── Helper: download image URL → Buffer so Baileys always gets raw bytes ──────
+// Passing { url: ... } to Baileys can silently fail if the CDN blocks
+// server-side fetches (Supabase Storage, Render networking, etc.).
+// Downloading first and sending as a Buffer is always reliable.
+async function fetchImageBuffer(imageUrl) {
+  const response = await fetch(imageUrl, {
+    headers: { "User-Agent": "BakeryPing/1.0" },
+  });
+  if (!response.ok) {
+    throw new Error(`Image fetch failed: ${response.status} ${response.statusText} — ${imageUrl}`);
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  return {
+    buffer: Buffer.from(arrayBuffer),
+    mimetype: response.headers.get("content-type") || "image/jpeg",
+  };
+}
+
 // ── Send a single WhatsApp message (supports optional image) ─────────────────
 app.post("/send-message", async (req, res) => {
   try {
@@ -197,8 +215,12 @@ app.post("/send-message", async (req, res) => {
     const jid = normalizePhone(phone) + "@s.whatsapp.net";
 
     if (imageUrl) {
+      console.log(`[${bakeryId}] Downloading image: ${imageUrl}`);
+      const { buffer, mimetype } = await fetchImageBuffer(imageUrl);
+      console.log(`[${bakeryId}] Image downloaded — ${buffer.length} bytes (${mimetype})`);
       await session.sock.sendMessage(jid, {
-        image: { url: imageUrl },
+        image: buffer,
+        mimetype,
         caption: message,
       });
     } else {
@@ -207,8 +229,8 @@ app.post("/send-message", async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Message failed" });
+    console.error(`[send-message] Error:`, err.message);
+    res.status(500).json({ error: err.message || "Message failed" });
   }
 });
 
@@ -222,13 +244,30 @@ app.post("/send-bulk", async (req, res) => {
 
     const results = { sent: 0, failed: 0, errors: [] };
 
+    // Download image ONCE before the loop — not on every message
+    let imageBuffer = null;
+    let imageMimetype = "image/jpeg";
+    if (imageUrl) {
+      try {
+        console.log(`[${bakeryId}] Downloading campaign image: ${imageUrl}`);
+        const result = await fetchImageBuffer(imageUrl);
+        imageBuffer = result.buffer;
+        imageMimetype = result.mimetype;
+        console.log(`[${bakeryId}] Image ready — ${imageBuffer.length} bytes`);
+      } catch (err) {
+        console.error(`[${bakeryId}] Image download failed — sending text-only:`, err.message);
+        // Don't abort the whole campaign — send text only if image fails
+      }
+    }
+
     for (const { phone, message } of recipients) {
       try {
         const jid = normalizePhone(phone) + "@s.whatsapp.net";
 
-        if (imageUrl) {
+        if (imageBuffer) {
           await session.sock.sendMessage(jid, {
-            image: { url: imageUrl },
+            image: imageBuffer,
+            mimetype: imageMimetype,
             caption: message,
           });
         } else {
@@ -236,8 +275,10 @@ app.post("/send-bulk", async (req, res) => {
         }
 
         results.sent++;
-        await new Promise((r) => setTimeout(r, 800));
+        // Small delay between messages to avoid WhatsApp rate limits
+        await new Promise((r) => setTimeout(r, 1000));
       } catch (err) {
+        console.error(`[${bakeryId}] Failed to send to ${phone}:`, err.message);
         results.failed++;
         results.errors.push({ phone, error: err.message });
       }
@@ -245,7 +286,7 @@ app.post("/send-bulk", async (req, res) => {
 
     res.json({ success: true, ...results });
   } catch (err) {
-    console.error(err);
+    console.error(`[send-bulk] Error:`, err.message);
     res.status(500).json({ error: "Bulk send failed" });
   }
 });
