@@ -303,14 +303,16 @@ export default function CampaignsPage() {
       // Upload banner if a new file was provided
       if (data.bannerFile) {
         setUploadingBanner(true);
-        const imageUrl = await uploadCampaignBanner(data.bannerFile, finalCampaign.id);
-        setUploadingBanner(false);
-        if (imageUrl) {
-          try {
+        try {
+          const imageUrl = await uploadCampaignBanner(data.bannerFile, finalCampaign.id);
+          if (imageUrl) {
             finalCampaign = await updateCampaign(finalCampaign.id, { banner_url: imageUrl });
-          } catch {
-            // banner_url column may not exist yet — campaign still saved without image
           }
+        } catch (uploadErr) {
+          const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+          alert(`⚠️ Campaign saved but image upload failed:\n\n${msg}\n\nMake sure you have a PUBLIC bucket named "campaigns" in Supabase Storage.`);
+        } finally {
+          setUploadingBanner(false);
         }
       }
 
