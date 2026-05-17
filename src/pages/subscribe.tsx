@@ -74,7 +74,7 @@ export default function SubscribePage() {
         name: "BakeryPing",
         description: "Monthly Subscription — ₹8,000/month",
         // If you have a Razorpay Plan ID for recurring subscriptions, use subscription_id instead:
-        // subscription_id: "your_razorpay_plan_id",
+        subscription_id: "plan_SqTNI2dmNOm3FG",
         prefill: {
           email: user.email,
           name: bakery.name,
