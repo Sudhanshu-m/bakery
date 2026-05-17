@@ -150,25 +150,6 @@ export async function uploadBakeryLogo(file: File, bakeryId: string): Promise<st
 }
 
 // ----------------------------------------------------------------
-// CAMPAIGN BANNER UPLOAD
-// ----------------------------------------------------------------
-
-export async function uploadCampaignBanner(file: File, campaignId: string): Promise<string | null> {
-  const db = requireSupabase();
-  const ext = file.name.split(".").pop() ?? "jpg";
-  const filePath = `${campaignId}.${ext}`;
-
-  // Try the bucket name — must be a PUBLIC bucket named "campaigns" in Supabase Storage
-  const { error } = await db.storage.from("campaigns").upload(filePath, file, { upsert: true, contentType: file.type });
-  if (error) {
-    // Surface the exact error so it can be caught and shown to the user
-    throw new Error(`Image upload failed: ${error.message}`);
-  }
-  const { data } = db.storage.from("campaigns").getPublicUrl(filePath);
-  return data.publicUrl;
-}
-
-// ----------------------------------------------------------------
 // CUSTOMERS
 // ----------------------------------------------------------------
 

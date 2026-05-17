@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Send, Check, Clock, FileText, Megaphone, Loader2,
-  Rocket, UploadCloud, ImageIcon, X, CheckCircle2, AlertCircle,
-  Pencil, Trash2, MoreHorizontal,
+  Rocket, CheckCircle2, AlertCircle, Pencil, Trash2, MoreHorizontal,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Button } from "@/components/ui/button";
@@ -29,7 +28,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import {
   getCampaigns, createCampaign, updateCampaign, deleteCampaign,
-  uploadCampaignBanner, getCustomers, getMyBakery,
+  getCustomers, getMyBakery,
   type Campaign, type Customer,
 } from "@/lib/db";
 
@@ -90,47 +89,23 @@ interface PublishResult {
 interface CampaignFormModalProps {
   open: boolean;
   onClose: () => void;
-  onSave: (data: {
-    name: string;
-    message: string;
-    trigger: Campaign["trigger_type"];
-    bannerFile: File | null;
-    existingBannerUrl?: string | null;
-  }) => Promise<void>;
+  onSave: (data: { name: string; message: string; trigger: Campaign["trigger_type"] }) => Promise<void>;
   initial?: Campaign | null;
   saving: boolean;
-  uploadingBanner: boolean;
 }
 
-function CampaignFormModal({ open, onClose, onSave, initial, saving, uploadingBanner }: CampaignFormModalProps) {
-  const [name, setName]         = useState(initial?.name ?? "");
-  const [message, setMessage]   = useState(initial?.message_template ?? "Hi {name}! 🎂 ");
-  const [trigger, setTrigger]   = useState<Campaign["trigger_type"]>(initial?.trigger_type ?? "manual");
-  const [bannerFile, setBannerFile] = useState<File | null>(null);
-  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+function CampaignFormModal({ open, onClose, onSave, initial, saving }: CampaignFormModalProps) {
+  const [name, setName]       = useState(initial?.name ?? "");
+  const [message, setMessage] = useState(initial?.message_template ?? "Hi {name}! 🎂 ");
+  const [trigger, setTrigger] = useState<Campaign["trigger_type"]>(initial?.trigger_type ?? "manual");
 
-  // Reset form when modal opens with new initial values
   useEffect(() => {
     if (open) {
       setName(initial?.name ?? "");
       setMessage(initial?.message_template ?? "Hi {name}! 🎂 ");
       setTrigger(initial?.trigger_type ?? "manual");
-      setBannerFile(null);
-      setBannerPreview(null);
     }
   }, [open, initial]);
-
-  const handleFile = (file: File) => {
-    if (!file.type.startsWith("image/")) return;
-    setBannerFile(file);
-    const reader = new FileReader();
-    reader.onload = (e) => setBannerPreview(e.target?.result as string);
-    reader.readAsDataURL(file);
-  };
-
-  const displayBanner = bannerPreview ?? initial?.banner_url ?? null;
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -170,62 +145,12 @@ function CampaignFormModal({ open, onClose, onSave, initial, saving, uploadingBa
               Use <code className="bg-muted px-1 rounded">{"{name}"}</code> — replaced with each customer's name when sent.
             </p>
           </div>
-
-          {/* Banner upload */}
-          <div>
-            <Label className="text-sm font-medium mb-1.5 block">
-              Campaign Image{" "}
-              <span className="font-normal text-muted-foreground">(optional — sent as WhatsApp image)</span>
-            </Label>
-            <div
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
-              onClick={() => fileRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors ${
-                isDragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 hover:bg-muted/20"
-              }`}
-            >
-              <input
-                ref={fileRef} type="file" accept="image/png,image/jpeg,image/jpg"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
-              />
-              {displayBanner ? (
-                <div className="flex flex-col items-center gap-2">
-                  <img src={displayBanner} alt="banner" className="max-h-20 rounded-lg object-contain mx-auto" />
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <ImageIcon className="w-3 h-3" />
-                    {bannerFile ? bannerFile.name : "Current banner"}
-                    <button
-                      type="button"
-                      className="text-destructive"
-                      onClick={(e) => { e.stopPropagation(); setBannerFile(null); setBannerPreview(null); }}
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <UploadCloud className="w-7 h-7 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground mb-1">Drop an image or <span className="text-primary underline">browse</span></p>
-                  <p className="text-xs text-muted-foreground">PNG, JPG · up to 5 MB</p>
-                </>
-              )}
-            </div>
-          </div>
         </div>
 
         <DialogFooter className="mt-2">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button
-            onClick={() => onSave({ name, message, trigger, bannerFile, existingBannerUrl: initial?.banner_url })}
-            disabled={!name.trim() || saving}
-          >
-            {uploadingBanner
-              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Uploading image…</>
-              : saving
+          <Button onClick={() => onSave({ name, message, trigger })} disabled={!name.trim() || saving}>
+            {saving
               ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</>
               : initial ? "Save Changes" : "Save as Draft"}
           </Button>
@@ -247,8 +172,7 @@ export default function CampaignsPage() {
   const [editCampaign, setEditCampaign] = useState<Campaign | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
 
-  const [saving, setSaving]               = useState(false);
-  const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const [publishing, setPublishing]   = useState<string | null>(null);
   const [publishProgress, setPublishProgress] = useState<{ sent: number; total: number } | null>(null);
@@ -273,8 +197,6 @@ export default function CampaignsPage() {
     name: string;
     message: string;
     trigger: Campaign["trigger_type"];
-    bannerFile: File | null;
-    existingBannerUrl?: string | null;
   }, campaignToEdit?: Campaign | null) => {
     if (!data.name.trim()) return;
     setSaving(true);
@@ -282,38 +204,18 @@ export default function CampaignsPage() {
       let finalCampaign: Campaign;
 
       if (campaignToEdit) {
-        // UPDATE existing campaign
         finalCampaign = await updateCampaign(campaignToEdit.id, {
           name: data.name,
           message_template: data.message,
           trigger_type: data.trigger,
-          // Keep existing banner_url unless a new file is being uploaded
-          ...(data.bannerFile ? {} : { banner_url: data.existingBannerUrl ?? null }),
         });
       } else {
-        // CREATE new campaign — do NOT include banner_url (column may not exist yet)
         finalCampaign = await createCampaign({
           name: data.name,
           message_template: data.message,
           trigger_type: data.trigger,
           status: "draft",
         });
-      }
-
-      // Upload banner if a new file was provided
-      if (data.bannerFile) {
-        setUploadingBanner(true);
-        try {
-          const imageUrl = await uploadCampaignBanner(data.bannerFile, finalCampaign.id);
-          if (imageUrl) {
-            finalCampaign = await updateCampaign(finalCampaign.id, { banner_url: imageUrl });
-          }
-        } catch (uploadErr) {
-          const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
-          alert(`⚠️ Campaign saved but image upload failed:\n\n${msg}\n\nMake sure you have a PUBLIC bucket named "campaigns" in Supabase Storage.`);
-        } finally {
-          setUploadingBanner(false);
-        }
       }
 
       setCampaigns((prev) =>
@@ -466,11 +368,6 @@ export default function CampaignsPage() {
                               : campaign.trigger_type === "anniversary"
                               ? "🎉 Anniversary"
                               : "🕒 Scheduled"}
-                            {campaign.banner_url && (
-                              <span className="text-primary flex items-center gap-0.5">
-                                <ImageIcon className="w-2.5 h-2.5" /> image
-                              </span>
-                            )}
                             · {new Date(campaign.created_at).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}
                           </div>
                         </div>
@@ -663,7 +560,6 @@ export default function CampaignsPage() {
         onClose={() => setCreateOpen(false)}
         onSave={(data) => handleSave(data, null)}
         saving={saving}
-        uploadingBanner={uploadingBanner}
       />
 
       {/* Edit Modal */}
@@ -673,7 +569,6 @@ export default function CampaignsPage() {
         onSave={(data) => handleSave(data, editCampaign)}
         initial={editCampaign}
         saving={saving}
-        uploadingBanner={uploadingBanner}
       />
 
       {/* Delete Confirmation */}
