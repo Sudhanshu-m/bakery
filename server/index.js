@@ -6,6 +6,7 @@ import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
+import Razorpay from "razorpay";
 
 import {
   default as makeWASocket,
@@ -41,6 +42,17 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = supabaseUrl && supabaseServiceKey
   ? createClient(supabaseUrl, supabaseServiceKey)
   : null;
+
+// Razorpay client (for creating subscriptions server-side)
+// Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in Render env vars
+const razorpay = process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
+  ? new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    })
+  : null;
+
+const RAZORPAY_PLAN_ID = "plan_SqTNI2dmNOm3FG";
 
 // Razorpay webhook secret (set in Render env vars)
 const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET;
@@ -299,6 +311,40 @@ app.post("/send-bulk", async (req, res) => {
   }
 });
 
+// ── Create Razorpay Subscription ─────────────────────────────────────────────
+// Frontend calls this first to get a sub_xxx ID, then opens Razorpay checkout.
+// POST /create-subscription  { bakery_id: "..." }
+app.post("/create-subscription", async (req, res) => {
+  try {
+    if (!razorpay) {
+      return res.status(503).json({ error: "Razorpay not configured on server. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET." });
+    }
+
+    const { bakery_id } = req.body;
+    if (!bakery_id) {
+      return res.status(400).json({ error: "bakery_id is required" });
+    }
+
+    console.log(`[create-subscription] Creating subscription for bakery: ${bakery_id}`);
+
+    const subscription = await razorpay.subscriptions.create({
+      plan_id: RAZORPAY_PLAN_ID,
+      customer_notify: 1,        // Razorpay sends payment reminders to customer
+      quantity: 1,
+      total_count: 120,          // Max billing cycles (10 years); cancel via webhook
+      notes: {
+        bakery_id,               // Passed back in webhook so we know which bakery
+      },
+    });
+
+    console.log(`[create-subscription] Created: ${subscription.id} status=${subscription.status}`);
+    res.json({ subscription_id: subscription.id });
+  } catch (err) {
+    console.error(`[create-subscription] Error:`, err?.error ?? err);
+    res.status(500).json({ error: err?.error?.description ?? err.message ?? "Failed to create subscription" });
+  }
+});
+
 // ── Razorpay Webhook ──────────────────────────────────────────────────────────
 // Razorpay calls this when a subscription payment succeeds or fails.
 // Set this URL in Razorpay Dashboard → Settings → Webhooks
@@ -408,3 +454,4 @@ app.listen(PORT, async () => {
   console.log(`WhatsApp server running on http://localhost:${PORT}`);
   await reconnectExistingSessions();
 });
+

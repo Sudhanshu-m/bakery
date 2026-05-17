@@ -66,15 +66,26 @@ export default function SubscribePage() {
       const loaded = await loadRazorpayScript();
       if (!loaded) throw new Error("Failed to load payment gateway. Please try again.");
 
-      // Open Razorpay checkout
+      // Step 1: Create a Razorpay subscription server-side to get sub_xxx ID
+      const serverUrl = import.meta.env.VITE_SERVER_URL ?? "https://bakery-ur88.onrender.com";
+      const subRes = await fetch(`${serverUrl}/create-subscription`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bakery_id: bakery.id }),
+      });
+      if (!subRes.ok) {
+        const err = await subRes.json().catch(() => ({}));
+        throw new Error(err.error ?? "Could not create subscription. Please try again.");
+      }
+      const { subscription_id } = await subRes.json();
+
+      // Step 2: Open Razorpay checkout with the subscription ID
+      // NOTE: When using subscription_id, do NOT pass amount/currency — Razorpay uses the plan amount.
       const options = {
         key: RAZORPAY_KEY_ID,
-        amount: 800000, // ₹8,000 in paise
-        currency: "INR",
+        subscription_id,           // sub_xxx from server — enables auto-recurring monthly billing
         name: "BakeryPing",
         description: "Monthly Subscription — ₹8,000/month",
-        // If you have a Razorpay Plan ID for recurring subscriptions, use subscription_id instead:
-        subscription_id: "plan_SqTNI2dmNOm3FG",
         prefill: {
           email: user.email,
           name: bakery.name,
@@ -82,11 +93,11 @@ export default function SubscribePage() {
         notes: {
           bakery_id: bakery.id,
         },
-        // Apply coupon if entered (Razorpay handles coupon validation)
         ...(coupon.trim() ? { offer_id: coupon.trim() } : {}),
         theme: { color: "#7c3aed" },
         handler: async (response: { razorpay_payment_id: string; razorpay_subscription_id?: string }) => {
-          // Payment successful — update Supabase
+          // First payment done — activate in Supabase immediately.
+          // Renewals are handled automatically via the Razorpay webhook on the server.
           try {
             await activateSubscription(
               bakery.id,
@@ -232,3 +243,4 @@ export default function SubscribePage() {
     </div>
   );
 }
+
